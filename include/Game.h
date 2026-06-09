@@ -42,18 +42,11 @@ private:
     void draw();
     void drawBoard();
     void drawSidebar();
-    void drawGemAt(float centerX, float centerY, const Cell& cell, float radius, bool pending = false);
-    void drawBonusIcon(BonusType bonus, float centerX, float centerY, float size);
-    void drawRecolorIcon(float centerX, float centerY, float size);
-    void drawBombIcon(float centerX, float centerY, float size);
+    void drawGemAt(float centerX, float centerY, const BoardElement& element, float radius, bool pending = false);
 
     void handleBoardClick(sf::Vector2i pixelPos);
     void beginRemoval(const std::vector<CellPos>& cells);
     void resolveRemoval();
-
-    void applyBonuses(std::vector<CellPos>& cellsToRemove);
-    void applyRecolorBonus(CellPos origin, GemColor sourceColor);
-    void applyBombBonus(std::vector<CellPos>& cellsToRemove, CellPos forcedTarget);
 
     [[nodiscard]] sf::FloatRect boardRect() const noexcept;
     [[nodiscard]] CellPos cellFromPixel(sf::Vector2i pixelPos) const;
@@ -64,6 +57,5 @@ private:
 
     [[nodiscard]] static sf::Color gemFillColor(GemColor color);
     [[nodiscard]] static sf::Color gemOutlineColor(GemColor color);
-    [[nodiscard]] static std::string bonusName(BonusType bonus);
     [[nodiscard]] std::string phaseName() const;
 };
