@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <cmath>
 
+#include "BoardElement.h"
 #include "Config.h"
 
 namespace {
@@ -14,10 +15,10 @@ const sf::Color panelBorder(190, 194, 205);
 const sf::Color selectionColor(255, 255, 255);
 const sf::Color instructionColor(42, 44, 54);
 const sf::Color mutedTextColor(95, 100, 115);
-const float pi = 3.1415926535f;
-}
+}  // namespace
 
-Game::Game() : m_rng(std::random_device{}()) {}
+Game::Game() : m_rng(std::random_device{}()) {
+}
 
 void Game::run() {
     m_window.create(
@@ -117,7 +118,7 @@ void Game::drawBoard() {
             const float centerX = rect.left + static_cast<float>(col * config::cellSize) + static_cast<float>(config::cellSize) * 0.5f;
             const float centerY = rect.top + static_cast<float>(row * config::cellSize) + cell.offsetY + static_cast<float>(config::cellSize) * 0.5f;
 
-            drawGemAt(centerX, centerY, cell, radius, pending);
+            drawGemAt(centerX, centerY, cell.currentElement(), radius, pending);
         }
     }
 
@@ -184,9 +185,7 @@ void Game::drawSidebar() {
     y += 30.0f;
 
     for (int i = 0; i < config::gemTypes; ++i) {
-        Cell sample;
-        sample.color = static_cast<GemColor>(i);
-        sample.bonus = BonusType::None;
+        StandardElement sample(static_cast<GemColor>(i));
         const float cx = stripX + 16.0f + static_cast<float>(i % 3) * 40.0f;
         const float cy = y + 16.0f + static_cast<float>(i / 3) * 40.0f;
         drawGemAt(cx, cy, sample, 14.0f, false);
@@ -196,19 +195,15 @@ void Game::drawSidebar() {
     drawLabel("Bonuses", stripX, y, 18, instructionColor);
     y += 34.0f;
 
-    Cell recolorSample;
-    recolorSample.color = GemColor::Yellow;
-    recolorSample.bonus = BonusType::Recolor;
+    RecolorBonusElement recolorSample(GemColor::Yellow);
     drawGemAt(stripX + 18.0f, y + 18.0f, recolorSample, 18.0f, false);
-    drawLabel("Recolor", stripX + 46.0f, y + 6.0f, 16, instructionColor);
+    drawLabel(recolorSample.sidebarName(), stripX + 46.0f, y + 6.0f, 16, instructionColor);
     drawLabel("changes nearby gems", stripX + 46.0f, y + 28.0f, 14, mutedTextColor);
     y += 60.0f;
 
-    Cell bombSample;
-    bombSample.color = GemColor::Red;
-    bombSample.bonus = BonusType::Bomb;
+    BombBonusElement bombSample(GemColor::Red);
     drawGemAt(stripX + 18.0f, y + 18.0f, bombSample, 18.0f, false);
-    drawLabel("Bomb", stripX + 46.0f, y + 6.0f, 16, instructionColor);
+    drawLabel(bombSample.sidebarName(), stripX + 46.0f, y + 6.0f, 16, instructionColor);
     drawLabel("removes 5 gems", stripX + 46.0f, y + 28.0f, 14, mutedTextColor);
 
     const float controlsY = panelTop + panelHeight - 88.0f;
@@ -217,11 +212,11 @@ void Game::drawSidebar() {
     drawLabel("LMB on neighbour: swap", stripX, controlsY + 46.0f, 14, instructionColor);
 }
 
-void Game::drawGemAt(float centerX, float centerY, const Cell& cell, float radius, bool pending) {
+void Game::drawGemAt(float centerX, float centerY, const BoardElement& element, float radius, bool pending) {
     sf::CircleShape gem(radius, 36);
-    gem.setFillColor(gemFillColor(cell.color));
+    gem.setFillColor(gemFillColor(element.color()));
     gem.setOutlineThickness(3.0f);
-    gem.setOutlineColor(gemOutlineColor(cell.color));
+    gem.setOutlineColor(gemOutlineColor(element.color()));
     gem.setPosition(centerX - radius, centerY - radius);
     m_window.draw(gem);
 
@@ -230,9 +225,7 @@ void Game::drawGemAt(float centerX, float centerY, const Cell& cell, float radiu
     highlight.setPosition(gem.getPosition().x + radius * 0.22f, gem.getPosition().y + radius * 0.15f);
     m_window.draw(highlight);
 
-    if (cell.bonus != BonusType::None) {
-        drawBonusIcon(cell.bonus, centerX, centerY, radius * 0.95f);
-    }
+    element.drawOverlay(m_window, centerX, centerY, radius * 0.95f);
 
     if (pending) {
         sf::CircleShape glow(radius + 3.0f, 36);
@@ -242,93 +235,6 @@ void Game::drawGemAt(float centerX, float centerY, const Cell& cell, float radiu
         glow.setPosition(centerX - (radius + 3.0f), centerY - (radius + 3.0f));
         m_window.draw(glow);
     }
-}
-
-void Game::drawBonusIcon(BonusType bonus, float centerX, float centerY, float size) {
-    switch (bonus) {
-        case BonusType::Recolor:
-            drawRecolorIcon(centerX, centerY, size);
-            break;
-        case BonusType::Bomb:
-            drawBombIcon(centerX, centerY, size);
-            break;
-        case BonusType::None:
-            break;
-    }
-}
-
-void Game::drawRecolorIcon(float centerX, float centerY, float size) {
-    sf::CircleShape base(size * 0.24f, 28);
-    base.setFillColor(sf::Color(250, 250, 250, 230));
-    base.setOutlineThickness(2.0f);
-    base.setOutlineColor(sf::Color(70, 74, 86, 210));
-    base.setPosition(centerX - size * 0.24f, centerY - size * 0.24f);
-    m_window.draw(base);
-
-    const sf::Color paletteDots[3] = {
-        sf::Color(220, 72, 72),
-        sf::Color(79, 185, 103),
-        sf::Color(78, 140, 241)
-    };
-    const float offsets[3][2] = {
-        {-0.18f, -0.10f},
-        {0.16f, -0.12f},
-        {0.02f, 0.17f}
-    };
-
-    for (int i = 0; i < 3; ++i) {
-        sf::CircleShape dot(size * 0.08f, 20);
-        dot.setFillColor(paletteDots[i]);
-        dot.setPosition(centerX + size * offsets[i][0] - size * 0.08f, centerY + size * offsets[i][1] - size * 0.08f);
-        m_window.draw(dot);
-    }
-
-    sf::RectangleShape brush(sf::Vector2f(size * 0.25f, size * 0.06f));
-    brush.setFillColor(sf::Color(92, 60, 34, 235));
-    brush.setOrigin(0.0f, size * 0.03f);
-    brush.setPosition(centerX + size * 0.02f, centerY + size * 0.03f);
-    brush.setRotation(36.0f);
-    m_window.draw(brush);
-
-    sf::ConvexShape tip(3);
-    tip.setPoint(0, sf::Vector2f(0.0f, 0.0f));
-    tip.setPoint(1, sf::Vector2f(size * 0.10f, -size * 0.05f));
-    tip.setPoint(2, sf::Vector2f(size * 0.10f, size * 0.05f));
-    tip.setFillColor(sf::Color(245, 245, 245, 230));
-    tip.setPosition(centerX - size * 0.04f, centerY - size * 0.08f);
-    tip.setRotation(36.0f);
-    m_window.draw(tip);
-}
-
-void Game::drawBombIcon(float centerX, float centerY, float size) {
-    sf::CircleShape bomb(size * 0.20f, 24);
-    bomb.setFillColor(sf::Color(35, 37, 44, 230));
-    bomb.setOutlineThickness(2.0f);
-    bomb.setOutlineColor(sf::Color(245, 245, 245, 230));
-    bomb.setPosition(centerX - size * 0.20f, centerY - size * 0.08f);
-    m_window.draw(bomb);
-
-    for (int i = 0; i < 8; ++i) {
-        const float angle = (pi / 4.0f) * static_cast<float>(i);
-        sf::RectangleShape ray(sf::Vector2f(size * 0.12f, 2.6f));
-        ray.setFillColor(sf::Color(255, 240, 160, 215));
-        ray.setOrigin(0.0f, 1.3f);
-        ray.setPosition(centerX, centerY);
-        ray.setRotation(angle * 180.0f / pi);
-        m_window.draw(ray);
-    }
-
-    sf::RectangleShape fuse(sf::Vector2f(size * 0.14f, 2.5f));
-    fuse.setFillColor(sf::Color(245, 210, 120, 230));
-    fuse.setOrigin(0.0f, 1.2f);
-    fuse.setPosition(centerX + size * 0.03f, centerY - size * 0.18f);
-    fuse.setRotation(-38.0f);
-    m_window.draw(fuse);
-
-    sf::CircleShape spark(size * 0.06f, 16);
-    spark.setFillColor(sf::Color(255, 214, 90, 240));
-    spark.setPosition(centerX + size * 0.15f - size * 0.06f, centerY - size * 0.24f - size * 0.06f);
-    m_window.draw(spark);
 }
 
 void Game::handleBoardClick(sf::Vector2i pixelPos) {
@@ -380,7 +286,7 @@ void Game::beginRemoval(const std::vector<CellPos>& cells) {
 
 void Game::resolveRemoval() {
     std::vector<CellPos> cellsToRemove = m_pendingRemoval;
-    applyBonuses(cellsToRemove);
+    m_board.applyTriggeredElements(cellsToRemove, m_rng);
 
     std::sort(cellsToRemove.begin(), cellsToRemove.end(), [](const CellPos& a, const CellPos& b) {
         if (a.row != b.row) {
@@ -401,93 +307,6 @@ void Game::resolveRemoval() {
 
     m_pendingRemoval.clear();
     m_phase = Phase::Falling;
-}
-
-void Game::applyBonuses(std::vector<CellPos>& cellsToRemove) {
-    const std::vector<CellPos> original = cellsToRemove;
-    for (const CellPos origin : original) {
-        if (!m_board.inBounds(origin) || m_board.at(origin).empty()) {
-            continue;
-        }
-
-        const Cell& cell = m_board.at(origin);
-        switch (cell.bonus) {
-            case BonusType::Recolor:
-                applyRecolorBonus(origin, cell.color);
-                break;
-            case BonusType::Bomb:
-                applyBombBonus(cellsToRemove, origin);
-                break;
-            case BonusType::None:
-                break;
-        }
-    }
-}
-
-void Game::applyRecolorBonus(CellPos origin, GemColor sourceColor) {
-    if (!m_board.inBounds(origin)) {
-        return;
-    }
-
-    if (!m_board.at(origin).empty()) {
-        m_board.at(origin).color = sourceColor;
-        m_board.at(origin).bonus = BonusType::None;
-    }
-
-    std::vector<CellPos> candidates;
-    for (int row = origin.row - config::bonusRadius; row <= origin.row + config::bonusRadius; ++row) {
-        for (int col = origin.col - config::bonusRadius; col <= origin.col + config::bonusRadius; ++col) {
-            const CellPos current{row, col};
-            if (!m_board.inBounds(current) || current == origin || m_board.at(current).empty()) {
-                continue;
-            }
-
-            if (std::abs(current.row - origin.row) + std::abs(current.col - origin.col) > 1) {
-                candidates.push_back(current);
-            }
-        }
-    }
-
-    std::shuffle(candidates.begin(), candidates.end(), m_rng);
-    const int limit = std::min(2, static_cast<int>(candidates.size()));
-    for (int i = 0; i < limit; ++i) {
-        Cell& cell = m_board.at(candidates[static_cast<std::size_t>(i)]);
-        cell.color = sourceColor;
-        cell.bonus = BonusType::None;
-    }
-}
-
-void Game::applyBombBonus(std::vector<CellPos>& cellsToRemove, CellPos forcedTarget) {
-    std::vector<CellPos> candidates;
-    candidates.reserve(config::boardRows * config::boardCols);
-
-    for (int row = 0; row < config::boardRows; ++row) {
-        for (int col = 0; col < config::boardCols; ++col) {
-            const CellPos pos{row, col};
-            if (!m_board.at(pos).empty()) {
-                candidates.push_back(pos);
-            }
-        }
-    }
-
-    std::shuffle(candidates.begin(), candidates.end(), m_rng);
-
-    if (m_board.inBounds(forcedTarget)) {
-        cellsToRemove.push_back(forcedTarget);
-    }
-
-    int added = 0;
-    for (const CellPos pos : candidates) {
-        if (pos == forcedTarget) {
-            continue;
-        }
-
-        cellsToRemove.push_back(pos);
-        ++added;
-        if (added >= 4) {
-            break;
-        }
-    }
 }
 
 sf::FloatRect Game::boardRect() const noexcept {
@@ -578,16 +397,6 @@ sf::Color Game::gemOutlineColor(GemColor color) {
     }
 
     return sf::Color::Transparent;
-}
-
-std::string Game::bonusName(BonusType bonus) {
-    switch (bonus) {
-        case BonusType::Recolor: return "Recolor";
-        case BonusType::Bomb: return "Bomb";
-        case BonusType::None: return "None";
-    }
-
-    return "None";
 }
 
 std::string Game::phaseName() const {
